@@ -1,0 +1,10 @@
+root {
+    windows [
+        {
+            cmd "",
+        },
+        {
+            cmd "vim",
+        },
+    ],
+},
