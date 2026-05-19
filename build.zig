@@ -8,7 +8,6 @@ pub fn build(b: *std.Build) void {
 
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
-        .valgrind = true,
         .target = target,
         .optimize = optimize,
     });
