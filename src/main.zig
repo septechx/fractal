@@ -24,8 +24,8 @@ pub fn main() !void {
     std.mem.copyForwards(u8, file_cstr, file);
     file_cstr[file_cstr.len - 1] = 0;
 
-    const val = c.glass_parse(file_cstr.ptr);
-    defer c.glass_result_free(val);
+    const res = c.glass_parse(file_cstr.ptr);
+    defer c.glass_result_free(res);
 
-    std.debug.print("{*}\n", .{val});
+    std.debug.print("result = {*}; kind = {}\n", .{ res, c.glass_result_get_kind(res) });
 }

@@ -4,7 +4,12 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const glass = b.addSystemCommand(&.{ "cargo", "-Z", "unstable-options", "-C", "glass", "build", "--release", "--features", "capi" });
+    const glass = b.addSystemCommand(&.{ "cargo", "-Z", "unstable-options", "-C", "glass", "build", "--features", "capi" });
+    if (optimize == .Debug) {
+        glass.setEnvironmentVariable("RUSTFLAGS", "-g");
+    } else {
+        glass.addArg("--release");
+    }
 
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -13,7 +18,7 @@ pub fn build(b: *std.Build) void {
     });
 
     exe_mod.addIncludePath(b.path("glass/include/"));
-    exe_mod.addLibraryPath(b.path("glass/target/release/"));
+    exe_mod.addLibraryPath(b.path(if (optimize == .Debug) "glass/target/debug/" else "glass/target/release/"));
     exe_mod.linkSystemLibrary("glass", .{});
 
     const exe = b.addExecutable(.{
