@@ -35,19 +35,19 @@ pub fn main(init: std.process.Init) !void {
 
     const value = c.glass_result_value(res);
 
-    const cfg = try config.Config.parse(@ptrCast(&value[0]), gpa);
+    const cfg = try config.Config.parse(@ptrCast(&value[0]), init.environ_map, gpa);
     defer cfg.free(gpa);
 
     try process_cfg(io, gpa, name, cfg);
 }
 
 fn process_cfg(io: Io, gpa: Allocator, name: []const u8, cfg: config.Config) !void {
-    try tmux.create_session(io, name);
+    try tmux.create_session(io, name, cfg.dir);
 
     for (0..cfg.windows.len) |i| {
         const cmd = cfg.windows[i].cmd;
         const index: u32 = @truncate(i + 1);
-        if (index > 1) try tmux.create_window(io, gpa, name, index);
+        if (index > 1) try tmux.create_window(io, gpa, name, index, cfg.dir);
         if (cmd.len != 0)
             try tmux.execute_command(io, gpa, name, index, cfg.windows[i].cmd);
     }
