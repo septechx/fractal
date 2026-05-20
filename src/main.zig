@@ -22,7 +22,7 @@ pub fn main() !void {
     defer gpa.free(file_cstr);
 
     std.mem.copyForwards(u8, file_cstr, file);
-    file_cstr[file_cstr.len - 1] = 0;
+    file_cstr[file.len] = 0;
 
     const res = c.glass_parse(file_cstr.ptr);
     defer c.glass_result_free(res);
