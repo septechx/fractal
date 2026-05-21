@@ -20,7 +20,7 @@ pub fn main(init: std.process.Init) !void {
     const io = init.io;
     const environ_map = init.environ_map;
 
-    const global_cfg = try getGlobalConfig(io, gpa, environ_map);
+    const cfg = try getGlobalConfig(io, gpa, environ_map);
 
     // TODO: Get this as argument
     const name = "testing";
@@ -42,25 +42,25 @@ pub fn main(init: std.process.Init) !void {
 
     const value = c.glass_result_value(res);
 
-    const cfg = try config.Config.parse(@ptrCast(&value[0]), environ_map, gpa);
-    defer cfg.free(gpa);
+    const layout = try config.Layout.parse(@ptrCast(&value[0]), environ_map, gpa);
+    defer layout.free(gpa);
 
-    try processConfig(io, gpa, global_cfg, name, cfg);
+    try processLayout(io, gpa, cfg, name, layout);
 }
 
-fn processConfig(io: Io, gpa: Allocator, global_cfg: config.GlobalConfig, name: []const u8, cfg: config.Config) !void {
-    try tmux.createSession(io, name, cfg.dir);
+fn processLayout(io: Io, gpa: Allocator, cfg: config.Config, name: []const u8, layout: config.Layout) !void {
+    try tmux.createSession(io, name, layout.dir);
 
-    for (cfg.windows, 0..) |window, i| {
+    for (layout.windows, 0..) |window, i| {
         const cmd = window.cmd;
-        const index: u32 = @truncate(i + global_cfg.first_window_offset);
-        if (index > 1) try tmux.createWindow(io, gpa, name, index, cfg.dir);
+        const index: u32 = @truncate(i + cfg.first_window_offset);
+        if (index > 1) try tmux.createWindow(io, gpa, name, index, layout.dir);
         if (cmd.len != 0)
-            try tmux.executeCommand(io, gpa, name, index, cfg.windows[i].cmd);
+            try tmux.executeCommand(io, gpa, name, index, layout.windows[i].cmd);
     }
 }
 
-fn getGlobalConfig(io: Io, gpa: Allocator, environ_map: *const std.process.Environ.Map) !config.GlobalConfig {
+fn getGlobalConfig(io: Io, gpa: Allocator, environ_map: *const std.process.Environ.Map) !config.Config {
     const config_path = try getConfigPath(gpa, environ_map);
     defer gpa.free(config_path);
 
@@ -78,7 +78,7 @@ fn getGlobalConfig(io: Io, gpa: Allocator, environ_map: *const std.process.Envir
 
     const value = c.glass_result_value(res);
 
-    return config.GlobalConfig.parse(@ptrCast(&value[0]));
+    return config.Config.parse(@ptrCast(&value[0]));
 }
 
 fn getConfigPath(gpa: Allocator, environ_map: *const std.process.Environ.Map) ![]const u8 {

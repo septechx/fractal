@@ -4,10 +4,10 @@ const c = @cImport({
     @cInclude("glass.h");
 });
 
-pub const GlobalConfig = struct {
+pub const Config = struct {
     first_window_offset: u32,
 
-    pub fn parse(value: *const c.GlassValue) GlobalConfig {
+    pub fn parse(value: *const c.GlassValue) Config {
         const map = c.glass_value_get_map(value);
         const len = c.glass_map_len(map);
 
@@ -27,11 +27,11 @@ pub const GlobalConfig = struct {
     }
 };
 
-pub const Config = struct {
+pub const Layout = struct {
     dir: []const u8,
     windows: []Window,
 
-    pub fn parse(value: *const c.GlassValue, environ_map: *const std.process.Environ.Map, gpa: Allocator) !Config {
+    pub fn parse(value: *const c.GlassValue, environ_map: *const std.process.Environ.Map, gpa: Allocator) !Layout {
         const map = c.glass_value_get_map(value);
         const len = c.glass_map_len(map);
 
@@ -83,7 +83,7 @@ pub const Config = struct {
         return .{ .windows = windows, .dir = dir };
     }
 
-    pub fn free(self: Config, gpa: Allocator) void {
+    pub fn free(self: Layout, gpa: Allocator) void {
         for (0..self.windows.len) |i| {
             gpa.free(self.windows[i].cmd);
         }
