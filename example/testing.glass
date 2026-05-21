@@ -1,5 +1,5 @@
 root {
-    dir "~/projects/fractal/",
+    dir "~/projects/fractal/example/",
     windows [
         {
             cmd "",

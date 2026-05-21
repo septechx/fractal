@@ -1,6 +1,6 @@
 run:
   zig build
-  env FRACTAL_CONFIG_OVERRIDE=config.glass ./zig-out/bin/fractal
+  env FRACTAL_CONFIG_OVERRIDE=example ./zig-out/bin/fractal testing
 
 setup:
   rustup install nightly

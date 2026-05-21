@@ -20,32 +20,17 @@ pub fn main(init: std.process.Init) !void {
     const io = init.io;
     const environ_map = init.environ_map;
 
+    const args = try init.minimal.args.toSlice(gpa);
+    defer gpa.free(args);
+    if (args.len < 2) return error.NotEnoughArguments;
+    const target_layout = args[1];
+
     const cfg = try getGlobalConfig(io, gpa, environ_map);
 
-    // TODO: Get this as argument
-    const name = "testing";
-
-    const file_name = try std.fmt.allocPrint(gpa, "{s}.glass", .{name});
-    defer gpa.free(file_name);
-
-    const file = try std.Io.Dir.cwd().readFileAlloc(io, file_name, gpa, .unlimited);
-    defer gpa.free(file);
-
-    const file_cstr = try toCstrSlice(gpa, file);
-    defer gpa.free(file_cstr);
-
-    const res = c.glass_parse(file_cstr.ptr);
-    defer c.glass_result_free(res);
-
-    if (c.glass_result_get_kind(res) == c.GLASS_RESULT_ERROR)
-        return error.InvalidGlassFile;
-
-    const value = c.glass_result_value(res);
-
-    const layout = try config.Layout.parse(@ptrCast(&value[0]), environ_map, gpa);
+    const layout = try getLayout(io, gpa, environ_map, target_layout);
     defer layout.free(gpa);
 
-    try processLayout(io, gpa, cfg, name, layout);
+    try processLayout(io, gpa, cfg, target_layout, layout);
 }
 
 fn processLayout(io: Io, gpa: Allocator, cfg: config.Config, name: []const u8, layout: config.Layout) !void {
@@ -60,9 +45,39 @@ fn processLayout(io: Io, gpa: Allocator, cfg: config.Config, name: []const u8, l
     }
 }
 
+fn getLayout(io: Io, gpa: Allocator, environ_map: *const std.process.Environ.Map, target: []const u8) !config.Layout {
+    const layout_path = try getConfigPath(gpa, environ_map, target);
+    defer gpa.free(layout_path);
+
+    _ = std.Io.Dir.cwd().statFile(io, layout_path, .{}) catch return error.LayoutNotFound;
+
+    const layout_str = try std.Io.Dir.cwd().readFileAlloc(io, layout_path, gpa, .unlimited);
+    defer gpa.free(layout_str);
+
+    const layout_cstr = try toCstrSlice(gpa, layout_str);
+    defer gpa.free(layout_cstr);
+
+    const res = c.glass_parse(layout_cstr.ptr);
+    defer c.glass_result_free(res);
+
+    if (c.glass_result_get_kind(res) == c.GLASS_RESULT_ERROR)
+        return error.InvalidGlassFile;
+
+    const value = c.glass_result_value(res);
+    return try config.Layout.parse(@ptrCast(&value[0]), environ_map, gpa);
+}
+
 fn getGlobalConfig(io: Io, gpa: Allocator, environ_map: *const std.process.Environ.Map) !config.Config {
-    const config_path = try getConfigPath(gpa, environ_map);
+    const config_path = try getConfigPath(gpa, environ_map, "config");
     defer gpa.free(config_path);
+
+    _ = std.Io.Dir.cwd().statFile(io, config_path, .{}) catch {
+        const dirname = std.fs.path.dirname(config_path) orelse ".";
+        try std.Io.Dir.cwd().createDirPath(io, dirname);
+        var config_file = try std.Io.Dir.cwd().createFile(io, config_path, .{});
+        defer config_file.close(io);
+        try config_file.writeStreamingAll(io, "root {\n    first_window_offset 0,\n},\n");
+    };
 
     const config_str = try std.Io.Dir.cwd().readFileAlloc(io, config_path, gpa, .unlimited);
     defer gpa.free(config_str);
@@ -77,14 +92,14 @@ fn getGlobalConfig(io: Io, gpa: Allocator, environ_map: *const std.process.Envir
         return error.InvalidGlassFile;
 
     const value = c.glass_result_value(res);
-
     return config.Config.parse(@ptrCast(&value[0]));
 }
 
-fn getConfigPath(gpa: Allocator, environ_map: *const std.process.Environ.Map) ![]const u8 {
-    if (environ_map.get("FRACTAL_CONFIG_OVERRIDE")) |override| return gpa.dupe(u8, override);
+fn getConfigPath(gpa: Allocator, environ_map: *const std.process.Environ.Map, target: []const u8) ![]const u8 {
+    if (environ_map.get("FRACTAL_CONFIG_OVERRIDE")) |override| return try std.fmt.allocPrint(gpa, "{s}/{s}.glass", .{ override, target });
 
-    return try std.fmt.allocPrint(gpa, "{s}/.config/fractal/config.glass", .{
+    return try std.fmt.allocPrint(gpa, "{s}/.config/fractal/{s}.glass", .{
         environ_map.get("HOME") orelse @panic("$HOME is not set"),
+        target,
     });
 }
