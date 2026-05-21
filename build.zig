@@ -4,6 +4,8 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const static_glass = b.option(bool, "static-glass", "Statically link libglass into the executable") orelse false;
+
     const glass = b.addSystemCommand(&.{ "cargo", "-Z", "unstable-options", "-C", "glass", "build", "--features", "capi" });
     if (optimize == .Debug) {
         glass.setEnvironmentVariable("RUSTFLAGS", "-g");
@@ -11,21 +13,29 @@ pub fn build(b: *std.Build) void {
         glass.addArg("--release");
     }
 
+    const glass_lib_path = if (optimize == .Debug) "glass/target/debug/" else "glass/target/release/";
+
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
-        // Disable single-threaded TLS reinit which is incompatible with
-        // dynamically loaded shared libraries that have TLS (like the Rust
-        // glass library and libgcc_s). Without this, Zig re-initializes TLS
-        // on Linux, overriding the dynamic linker's correct TLS setup and
-        // causing segfaults in malloc (glibc's thread_arena).
-        .single_threaded = true,
+        // Disable single-threaded TLS reinit when using glass as a
+        // dynamic library as it is incompatible with dynamically loaded
+        // shared libraries that have TLS. Without this, Zig re-initializes
+        // TLS on Linux, overriding the dynamic linker's correct TLS setup
+        // and causing segfaults in malloc (glibc's thread_arena).
+        .single_threaded = !static_glass,
     });
 
     exe_mod.addIncludePath(b.path("glass/include/"));
-    exe_mod.addLibraryPath(b.path(if (optimize == .Debug) "glass/target/debug/" else "glass/target/release/"));
-    exe_mod.linkSystemLibrary("glass", .{});
+    if (static_glass) {
+        exe_mod.addObjectFile(b.path(b.pathJoin(&.{ glass_lib_path, "libglass.a" })));
+        exe_mod.linkSystemLibrary("c", .{});
+        exe_mod.linkSystemLibrary("gcc_s", .{});
+    } else {
+        exe_mod.addLibraryPath(b.path(glass_lib_path));
+        exe_mod.linkSystemLibrary("glass", .{});
+    }
 
     const exe = b.addExecutable(.{
         .name = "fractal",

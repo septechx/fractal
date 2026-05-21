@@ -16,7 +16,9 @@ cd fractal
 zig build -Doptimize=ReleaseSafe
 ```
 
-The binary is placed at `zig-out/bin/fractal`. You will also need `libglass.so`, placed at `glass/target/release`.
+The binary is placed at `zig-out/bin/fractal`. You will also need `libglass.so`, which is placed at `glass/target/release`.
+
+If you prefer static linking, you can use the `-Dstatic-glass` flag to have `libglass.a` included in the executable instead.
 
 ## Usage
 
