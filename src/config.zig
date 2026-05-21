@@ -4,6 +4,29 @@ const c = @cImport({
     @cInclude("glass.h");
 });
 
+pub const GlobalConfig = struct {
+    first_window_offset: u32,
+
+    pub fn parse(value: *const c.GlassValue) GlobalConfig {
+        const map = c.glass_value_get_map(value);
+        const len = c.glass_map_len(map);
+
+        var first_window_offset_value: ?*const c.GlassValue = null;
+        for (0..len) |i| {
+            const entry = c.glass_map_get(map, i);
+            const key = std.mem.sliceTo(c.glass_map_entry_key(entry), 0);
+            if (std.mem.eql(u8, key, "first_window_offset")) {
+                first_window_offset_value = c.glass_map_entry_value(entry);
+            }
+        }
+
+        const first_window_offset_num = c.glass_value_get_number(first_window_offset_value);
+        const first_window_offset: u32 = @trunc(first_window_offset_num);
+
+        return .{ .first_window_offset = first_window_offset };
+    }
+};
+
 pub const Config = struct {
     dir: []const u8,
     windows: []Window,

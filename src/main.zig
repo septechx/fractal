@@ -8,9 +8,19 @@ const c = @cImport({
     @cInclude("glass.h");
 });
 
+fn toCstrSlice(gpa: Allocator, str: []const u8) ![]const u8 {
+    const cstr = try gpa.alloc(u8, str.len + 1);
+    std.mem.copyForwards(u8, cstr, str);
+    cstr[str.len] = 0;
+    return cstr;
+}
+
 pub fn main(init: std.process.Init) !void {
     const gpa = init.gpa;
     const io = init.io;
+    const environ_map = init.environ_map;
+
+    const global_cfg = try getGlobalConfig(io, gpa, environ_map);
 
     // TODO: Get this as argument
     const name = "testing";
@@ -18,14 +28,11 @@ pub fn main(init: std.process.Init) !void {
     const file_name = try std.fmt.allocPrint(gpa, "{s}.glass", .{name});
     defer gpa.free(file_name);
 
-    const file = std.Io.Dir.cwd().readFileAlloc(io, file_name, gpa, .unlimited) catch unreachable;
+    const file = try std.Io.Dir.cwd().readFileAlloc(io, file_name, gpa, .unlimited);
     defer gpa.free(file);
 
-    const file_cstr = gpa.alloc(u8, file.len + 1) catch unreachable;
+    const file_cstr = try toCstrSlice(gpa, file);
     defer gpa.free(file_cstr);
-
-    std.mem.copyForwards(u8, file_cstr, file);
-    file_cstr[file.len] = 0;
 
     const res = c.glass_parse(file_cstr.ptr);
     defer c.glass_result_free(res);
@@ -35,20 +42,49 @@ pub fn main(init: std.process.Init) !void {
 
     const value = c.glass_result_value(res);
 
-    const cfg = try config.Config.parse(@ptrCast(&value[0]), init.environ_map, gpa);
+    const cfg = try config.Config.parse(@ptrCast(&value[0]), environ_map, gpa);
     defer cfg.free(gpa);
 
-    try process_cfg(io, gpa, name, cfg);
+    try processConfig(io, gpa, global_cfg, name, cfg);
 }
 
-fn process_cfg(io: Io, gpa: Allocator, name: []const u8, cfg: config.Config) !void {
-    try tmux.create_session(io, name, cfg.dir);
+fn processConfig(io: Io, gpa: Allocator, global_cfg: config.GlobalConfig, name: []const u8, cfg: config.Config) !void {
+    try tmux.createSession(io, name, cfg.dir);
 
-    for (0..cfg.windows.len) |i| {
-        const cmd = cfg.windows[i].cmd;
-        const index: u32 = @truncate(i + 1);
-        if (index > 1) try tmux.create_window(io, gpa, name, index, cfg.dir);
+    for (cfg.windows, 0..) |window, i| {
+        const cmd = window.cmd;
+        const index: u32 = @truncate(i + global_cfg.first_window_offset);
+        if (index > 1) try tmux.createWindow(io, gpa, name, index, cfg.dir);
         if (cmd.len != 0)
-            try tmux.execute_command(io, gpa, name, index, cfg.windows[i].cmd);
+            try tmux.executeCommand(io, gpa, name, index, cfg.windows[i].cmd);
     }
+}
+
+fn getGlobalConfig(io: Io, gpa: Allocator, environ_map: *const std.process.Environ.Map) !config.GlobalConfig {
+    const config_path = try getConfigPath(gpa, environ_map);
+    defer gpa.free(config_path);
+
+    const config_str = try std.Io.Dir.cwd().readFileAlloc(io, config_path, gpa, .unlimited);
+    defer gpa.free(config_str);
+
+    const config_cstr = try toCstrSlice(gpa, config_str);
+    defer gpa.free(config_cstr);
+
+    const res = c.glass_parse(config_cstr.ptr);
+    defer c.glass_result_free(res);
+
+    if (c.glass_result_get_kind(res) == c.GLASS_RESULT_ERROR)
+        return error.InvalidGlassFile;
+
+    const value = c.glass_result_value(res);
+
+    return config.GlobalConfig.parse(@ptrCast(&value[0]));
+}
+
+fn getConfigPath(gpa: Allocator, environ_map: *const std.process.Environ.Map) ![]const u8 {
+    if (environ_map.get("FRACTAL_CONFIG_OVERRIDE")) |override| return gpa.dupe(u8, override);
+
+    return try std.fmt.allocPrint(gpa, "{s}/.config/fractal/config.glass", .{
+        environ_map.get("HOME") orelse @panic("$HOME is not set"),
+    });
 }
