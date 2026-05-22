@@ -41,7 +41,7 @@ fn processLayout(io: Io, gpa: Allocator, cfg: config.Config, name: []const u8, l
         const index: u32 = @truncate(i + cfg.first_window_offset);
         if (index > 1) try tmux.createWindow(io, gpa, name, index, layout.dir);
         if (cmd.len != 0)
-            try tmux.executeCommand(io, gpa, name, index, layout.windows[i].cmd);
+            try tmux.executeCommand(io, gpa, name, index, cmd);
     }
 
     try tmux.attach(io);
