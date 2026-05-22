@@ -43,6 +43,8 @@ fn processLayout(io: Io, gpa: Allocator, cfg: config.Config, name: []const u8, l
         if (cmd.len != 0)
             try tmux.executeCommand(io, gpa, name, index, layout.windows[i].cmd);
     }
+
+    try tmux.attach(io);
 }
 
 fn getLayout(io: Io, gpa: Allocator, environ_map: *const std.process.Environ.Map, target: []const u8) !config.Layout {
